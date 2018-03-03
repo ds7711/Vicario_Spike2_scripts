@@ -1,0 +1,21 @@
+' randomize the ISI?
+Logclear();	
+var rdmag;
+rdmag := Input("One-side jitter from uniform distribution: ", rdmag);
+'magnitude of randomization on one side, jitter = 0.1 for isi = 1 generates isi betten 0.9 and 1.1
+var jitters[4000];
+Rand(jitters, 2.0*rdmag, -rdmag);
+PrintLog(jitters);
+
+
+proc LogClear();
+'show and clear the logfile
+var lh%;
+lh% := Loghandle();
+FrontView(lh%);
+Window(0,0,80,60);	'set window to useful size
+'WindowVisible(1);
+EditSelectAll();		'select text in the log window
+EditClear();			'clears selected text
+return;
+end;

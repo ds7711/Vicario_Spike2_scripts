@@ -43,7 +43,7 @@
 ' datfiln$:    datfilntxt$:     datfilnsmr$: 
 var listfil$, datawin%, str1$, datfiln$;
 var datfilntxt$, datfilnsmr$;
-var nreps%, nqstims%, instims%, inreps%, tstims%, iarr%, stimseq%[4000];
+var nreps%, nqstims%, instims%, inreps%, tstims%, iarr%, stimseq%[40000]; ' # of stimulus trials
 var fh%, lh%;			'file handle for the binary file & log handle 
 var sfilnam$[2][100], sfil$;		'set up an array storing stim code and stim filename; 100 is the maximum # of stimuli that can be stored. 
 var sratfac[100];
@@ -107,7 +107,7 @@ for istim% := 1 to nstims% do
     then Message("Missing stim file, quitting");
         halt;
     endif; 
-	temp% := BReadSize(2,stimarr%[][istim%]); 'read the finary file into computer memory
+	temp% := BReadSize(2,stimarr%[][istim%]); 'read the binary file into computer memory
     checkstimduration[istim%] := temp%/(sratfac[istim%]*dacrate%); 'obtain the stimulus duration from dividing number of data points by sampling rate
     PrintLog("Stimulus Duration: ", checkstimduration[istim%], " seconds");
     if temp% > ptsgot% then 
@@ -133,24 +133,7 @@ halt;
 endif;
 FileClose();
 
-' -----------------------------------------------------Part4----------------------------------------------------
-'input the ISI
-isi := 6.0;				'set default ISI onset-onset				
-isi := Input("IStimInt (onset-onset): ",isi);	'get value from user
-
-' prestim: recording duration before stimulus is presented; 
-' afterstim: recording duration from stimulus onset
-' gapduration: duration without recording activity between trials
-var prestim, afterstim, gapduration;   
-if isi < 4.0 then
-    prestim := isi*100000*2.5/10;
-    afterstim := isi*100000*5/10;
-    gapduration := isi*100000*2.5/10-5200; 
-else
-    prestim := isi*100000 * (1.0 / isi);
-    afterstim := isi*100000 * ((isi - 1 - 1)/ isi);
-    gapduration := isi*100000 * (1 / isi) - 5200; 
-endif    
+' -----------------------------------------------------Part4---------------------------------------------------- 
 
 ' Build the stimset USing Stimset, StimOrder, & Shuffle function
 ' The output is stored in stimseq%
@@ -221,6 +204,27 @@ next;
 PrintLog(sfilnam$[1][1:nstims%]);
 PrintLog(checkstimduration[1:nstims%]);
 
+
+'input the ISI
+isi := 5.0;				'set default ISI onset-onset				
+isi := Input("IStimInt (onset-onset): ",isi);	'get value from user
+var rdmag;
+rdmag := Input("One-side jitter from uniform distribution: ", rdmag);
+var jitters[4000];
+' jitter is added to both pre-stim and after-stim, see main loop
+Rand(jitters, rdmag, -rdmag / 2.0);  ' jitter mag = jitters * 2
+
+
+' prestim: recording duration before stimulus is presented; 
+' afterstim: recording duration from stimulus onset
+' gapduration: duration without recording activity between trials
+var prestim, afterstim, gapduration;   
+prestim := isi*100000*2.5/10; ' 1/4 of ISI
+afterstim := isi*100000*5/10; ' 2/4 of ISI
+gapduration := isi*100000*2.5/10-5200; ' 1/4 of ISI - ??? 
+
+
+
 If(Query("Ready to recording?","YES, start sampling","No, quit"))=0 then
 WindowVisible(0);				'hide all the data
 RedoStimOrder();
@@ -275,14 +279,14 @@ Yield(.5);  'wait for 0.5 seconds to help the program get rid of unused memory
 ' SampleSeqVar(3,cstim%) equals to V3 := cstim% := stimseq%[0]
 SampleSeqVar(77,cstim%);		'write stim no code to V77 sequence
 ' SampleSeqVar(5,isidel%) equal to V5 := 100000*(isi-6.0) + 24995 
-SampleSeqVar(5,gapduration);	'set V5 in sequencer for ISI=isidel+3s=6s+isidel; gapduration = isi*100000*2/10 - 5200
+SampleSeqVar(5,gapduration);	'set V5 = gapduration = isi*100000*2.5/10 - 5200
 'set V10 in Sequence File to be one fifth of isi; 
 'V10 is used to determine when the recording starts relative before the stimulus is presented
-SampleSeqVar(10,prestim);  ' prestim := isi*100000*3/10
+SampleSeqVar(10,prestim);  ' prestim := isi*100000*2.5/10
 'set V11 in Sequence File to be six tenthes of isi; 
 'V11 determines the duration of recording after stimulus starts; 
 'So, V11 must be larger than the duration of stimulus, which is shorter than one half of isi
-SampleSeqVar(11,isi*100000*5/10); 'V11 has to be longer than the duration of the stimulus, otherwise 
+SampleSeqVar(11,afterstim); 'V11 has to be longer than the duration of the stimulus, otherwise 
 SampleSeqVar(4,1);			' set V4 go-ahead to GO, V4 := 1
 SampleSeqVar(1,1);          ' set V1 to 1
 
@@ -291,6 +295,7 @@ SampleStart(-1);								'start sampling
 
 ' !!! The first waiting time could be critical ... 
 Yield(0.020);          'wait for 0.02 seconds
+
 
 '_____________________________________MAIN LOOP_________________________________________
 ' Main loop contains 3 parts: 
@@ -302,11 +307,17 @@ Yield(0.020);          'wait for 0.02 seconds
 ' Double bufffer system: the reading & writing of stimulus alternates between PlayArea Waveform A and B
 
 var PlayArea%, abc, V1%, V101%, timestart, timestop, gap;
+var tmpjitter;  ' tmp value for storing jitter
 ' PlayArea% := SampleSeqVar(65);  ' Obtain the waveform area that the CED would play in this loop: either A or B
 
 for istim% := 1 to (tstims%-1) do
     timestart := seconds();
-    V101% := SampleSeqVar(101);  
+    V101% := SampleSeqVar(101);
+    
+    ' add jitter to ISI
+    tmpjitter := jitters[istim%]
+    SampleSeqVar(5,gapduration + tmpjitter)  ' add jitter to after stim
+    SampleSeqVar(10,prestim + tmpjitter)  ' add jiter to pre stim
     
     ' 1st loop: wait until the the next recording session starts. 
 	repeat 		'wait until V1 goes non-zero(it's the time when next recording session starts)
@@ -597,3 +608,16 @@ for iii% := 0 to veclen% - 1 do
 next;
 return output$;
 end;
+
+
+''' Old codes
+' 1. ISI division
+'if isi < 4.0 then
+'    prestim := isi*100000*2.5/10;
+'    afterstim := isi*100000*5/10;
+'    gapduration := isi*100000*2.5/10-5200; 
+'else
+'    prestim := isi*100000 * (1.0 / isi);
+'    afterstim := isi*100000 * ((isi - 1 - 1)/ isi);
+'    gapduration := isi*100000 * (1 / isi) - 5200; 
+'endif  

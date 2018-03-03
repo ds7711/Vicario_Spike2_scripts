@@ -34,7 +34,7 @@
                         ;   Play waveform in Area A
 0007            WAVEGO A,T             ;Arm waveform
                         ;   Play waveform in Area A
-0008            DELAY  V10             ;V10=isi%*100000*2/10 in script
+0008            DELAY  V10             ;V10=isi%*100000*2.5/10 in script
 0009 L0run:     MOVI   V1,1            ;V1 := 1
 0010 L0stim:    MARK   66              ;Generate digital marker at stim onset (66="B")
 
